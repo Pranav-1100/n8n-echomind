@@ -1,0 +1,662 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b3f32965-eaf7-4301-82ca-1945d8ff2de5",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9e1bbff7-dbe5-42ba-9c32-87a5def100a9",
+      "name": "Webhook",
+      "webhookId": "b3f32965-eaf7-4301-82ca-1945d8ff2de5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e4546018-bd13-441b-a514-08eb101babe1",
+              "leftValue": "={{ $json.body.transcript }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        144,
+        0
+      ],
+      "id": "aaf70eca-1042-459b-b6c9-dbbe85da1c21",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.transcript }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Analyze the emotion in this text. Respond with ONLY a raw JSON object containing \"emotion\" (one word: anxious, happy, neutral, stressed, or excited) and \"confidence\" (a decimal between 0.0 and 1.0). Do not include markdown formatting or backticks.  Transcript: {{ $('Webhook').item.json.body.transcript }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        352,
+        -48
+      ],
+      "id": "5471d41c-55ab-4355-97f4-073f4233ff65",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        352,
+        80
+      ],
+      "id": "ad6d3ff9-001b-4e05-bcbc-5add72fbae13",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "RsqbPtMC4zeqR5vC",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1c021aa1-dbc7-4649-8edb-3d78205d5de3",
+              "leftValue": "={{ parseFloat($json.text.match(/\"confidence\":\\s*([\\d.]+)/)[1]) }}",
+              "rightValue": 0.6,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        -48
+      ],
+      "id": "9379756d-12ee-46a8-ab97-9ab5e2247f47",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "91d0af6a-0ef4-4437-a2e5-f04e8bc69f1e",
+              "name": "emotion",
+              "value": "uncertain",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        912,
+        48
+      ],
+      "id": "20019006-e164-4718-9949-89606f4cb6ea",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.transcript }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Classify this transcript into standard categories. Respond with ONLY a raw JSON object containing \"primary\" (choose one: work, life, coding, health, or social) and \"secondary\" (choose one: work, life, coding, health, social, or none). Do not include markdown formatting or backticks."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1200,
+        -128
+      ],
+      "id": "4018476d-9c3a-4eb3-8dcb-f9436026dcc9",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        16
+      ],
+      "id": "68c356f0-9ad2-4be0-8165-c1fa54a900ed",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "RsqbPtMC4zeqR5vC",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.transcript }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Rewrite this transcript into a dense, objective 2-3 sentence summary optimized for semantic vector search. Return ONLY the plain text summary, nothing else."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1504,
+        -128
+      ],
+      "id": "b6500418-7637-45bd-b2b2-e00eb4fb17aa",
+      "name": "Basic LLM Chain2"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        32
+      ],
+      "id": "552de410-f48d-40c7-a9cf-b47aeb7aad2e",
+      "name": "Groq Chat Model2",
+      "credentials": {
+        "groqApi": {
+          "id": "RsqbPtMC4zeqR5vC",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6b5b16e9-08d4-4a92-bdaf-e2417c61258b",
+              "name": "speaker",
+              "value": "={{ $('Webhook').item.json.body.speaker }}",
+              "type": "string"
+            },
+            {
+              "id": "0fd8be92-42ff-4c29-8e91-6a4965edf1bd",
+              "name": "transcript",
+              "value": "={{ $('Webhook').item.json.body.transcript }}",
+              "type": "string"
+            },
+            {
+              "id": "e719a535-0b12-4851-bdd0-536fc544f0ef",
+              "name": "emotion",
+              "value": "={{ $('Basic LLM Chain').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "dc94eca9-4826-4e2c-a72d-29869e756cf5",
+              "name": "topic",
+              "value": "={{ $('Basic LLM Chain1').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "800efaa3-d7a3-4554-b255-99ba5a88b4ac",
+              "name": "summary",
+              "value": "={{ $('Basic LLM Chain2').item.json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1856,
+        -128
+      ],
+      "id": "583f5add-76de-402c-9b5a-2a6b537b1ec9",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY",
+          "mode": "list",
+          "cachedResultName": "EchoMind DB",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Speaker",
+              "displayName": "Speaker",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Transcript",
+              "displayName": "Transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Emotion",
+              "displayName": "Emotion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "speaker",
+              "displayName": "speaker",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "transcript",
+              "displayName": "transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "emotion",
+              "displayName": "emotion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2064,
+        -128
+      ],
+      "id": "5a8074c3-22a1-4a13-a318-b921231d4713",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "rT4KDcdWTQem3Kev",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "echomind-n8n",
+          "mode": "list",
+          "cachedResultName": "echomind-n8n"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        112
+      ],
+      "id": "c8bd907c-cef0-4100-8698-b6f396166209",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "cpOs1gTbLQ6QaeJU",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        2128,
+        320
+      ],
+      "id": "9c240b2b-32a7-4d58-b416-2c4d28f288c3",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "modelName": "sentence-transformers/all-MiniLM-L6-v2",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsHuggingFaceInference",
+      "typeVersion": 1,
+      "position": [
+        2032,
+        320
+      ],
+      "id": "f218da75-69b3-46e7-bcae-fc3edcf8eaa7",
+      "name": "Embeddings HuggingFace Inference",
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "jmVN7xYccnea37Bw",
+          "name": "Hugging Face account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pinecone Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings HuggingFace Inference": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "idlaz2HumpPA0ZDI",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "96ea10c7-59d2-447a-9e04-8cfce8c7ea45",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "13243da696b496ed3d9e3284ec4d34e6803f8469480ea119cb0c43017d344a03"
+  },
+  "nodeGroups": [],
+  "id": "drIG795KFoFLjmQJ",
+  "tags": []
+}
