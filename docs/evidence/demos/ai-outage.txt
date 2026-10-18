@@ -1,0 +1,47 @@
+
+== 21:47:05 before
+workflow_errors rows: 1, failed executions (metric): 0
+
+== 21:47:05 fault: replace the LLM key with an invalid one and restart n8n (credentials load at start-up)
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 of 1 updated replicas are available...
+deployment "echomind" successfully rolled out
+
+== 21:47:59 symptom: ingest fails honestly (500), n8n itself stays healthy
+POST ingest -> 500 (500 expected)
+GET /healthz -> 200
+
+== 21:48:03 evidence: the error logger recorded it in Postgres
+workflow_errors rows: before 1, after 2
+2026-10-18 16:18:03.485258+00|EchoMind - Memory Ingestion|Basic LLM Chain|Authorization failed - please check your credentials
+
+== 21:48:05 evidence: failed-executions metric (scraped every 15s)
+failed executions: before 0, now 1
+
+== 21:48:36 restore: put the original LLM key back and restart n8n
+Waiting for deployment spec update to be observed...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "echomind" rollout to finish: 0 of 1 updated replicas are available...
+deployment "echomind" successfully rolled out
+
+== 21:49:39 verify: the full user journey works again
+== health workflow (full mode)
+{"status":"ok","workflow":"EchoMind - Health Check","execution":"391","time":"2026-10-18T21:49:39.388+05:30"}
+== ingest without token -> 403
+403
+== ingest without transcript -> 400
+400
+== recall without login -> 401
+401
+== ingest a memory -> 201 (real LLM + embeddings, can take ~15s)
+{"status":"stored","speaker":"smoke-test","summary":"During the smoke test call, the team agreed that checklist release-1792340380-12277 is owned by the platform team. The checklist is due on Friday."}
+== recall it -> 200
+{"text":"Checklist **release-1792340380-12277** is owned by the **platform team** and is due on **Friday**."}
+SMOKE OK (full): health, version, auth, validation, ingest and recall on http://localhost:5678
+DEMO OK: failure surfaced as 500, logged, measured; recovered after restoring the key

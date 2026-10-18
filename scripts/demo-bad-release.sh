@@ -21,7 +21,7 @@ step "before: revision $revision_before, image $image_before"
 
 step "probe the health workflow every second while the bad release rolls out"
 probe_log=$(mktemp)
-( while [[ -f "$probe_log" ]]; do
+( while true; do
     code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "$BASE/webhook/echomind-health" || true)
     echo "$(date +%s) ${code:-000}" >> "$probe_log" 2>/dev/null || true
     sleep 1
@@ -43,9 +43,11 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
+# Stop the prober explicitly; a file-based stop flag races with its own writes.
+kill "$prober" 2>/dev/null || true
+wait "$prober" 2>/dev/null || true
 cp "$probe_log" "$probe_log.done"
 rm -f "$probe_log"
-wait "$prober" 2>/dev/null || true
 total=$(wc -l < "$probe_log.done" | tr -d ' ')
 failed=$(grep -vc ' 200$' "$probe_log.done" || true)
 rm -f "$probe_log.done"

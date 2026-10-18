@@ -1,11 +1,7 @@
 # EchoMind
 
-> This branch turns EchoMind into a service that is deployed, operated and observed on Kubernetes.
-> The project description below is unchanged from the baseline commit
-> [`423c114`](https://github.com/Pranav-1100/n8n-echomind/commit/423c114d6dbcbd34af931eeec994c0600eead501).
-> Some services have been replaced since then (Groq → OpenAI-compatible LLM endpoint, Pinecone → pgvector,
-> Google Sheets → Postgres). See [What changed since the baseline](#what-changed-since-the-baseline)
-> and [Running EchoMind locally](#running-echomind-locally).
+> This branch runs EchoMind on Kubernetes with CI/CD and observability. The description below is unchanged from the
+> baseline commit [`423c114`](https://github.com/Pranav-1100/n8n-echomind/commit/423c114d6dbcbd34af931eeec994c0600eead501); see [Running EchoMind on Kubernetes](#running-echomind-on-kubernetes) for what changed.
 
 ## Overview
 
@@ -194,173 +190,86 @@ Pranav Aggarwal
 
 ---
 
-# Deploying and operating EchoMind
+# Running EchoMind on Kubernetes
 
-## What changed since the baseline
+## What changed in this PR
 
-| Concern | Baseline (`423c114`) | Now |
-|---|---|---|
-| Runtime | Workflows set up by hand in an n8n editor account | n8n 2.44.3 on Kubernetes (kind), deployed with Helm |
-| Workflows | Four exports in the repo root, imported by hand | `workflows/*.json`, baked into the image and imported automatically at start-up |
-| LLM | Groq, Llama 3.3 70B (model family since retired) | OpenAI-compatible endpoint (Hack Club proxy), model `deepseek/deepseek-v4.1-flash-1017` |
-| Vector store | Pinecone index `echomind-n8n` | pgvector in our own Postgres (table `memory_vectors`) |
-| Structured memories / error log | Google Sheets | Postgres tables `memories` and `workflow_errors` |
-| Embeddings | Hugging Face `sentence-transformers/all-MiniLM-L6-v2` | Unchanged (384 dimensions) |
-| Email triage | Gmail + Sheets | Kept in the repo, inactive until Google OAuth is set up |
-| Ingest webhook | No authentication, replied "Workflow was started" before doing any work | Token in `X-EchoMind-Token`; replies `201` / `400` / `403` / `500` when the work is done |
-| Recall chat | Usable only inside the n8n editor | Authenticated HTTP endpoint (basic auth) |
+- **Workflows fixed** (`workflows/`): ingest needs a token and replies `201` / `400` / `403` / `500` when the work is done; recall is an authenticated HTTP endpoint; every workflow reports failures. See [docs/BASELINE.md](docs/BASELINE.md).
+- **Services replaced** so EchoMind runs on infrastructure we control: Groq (retired model) → OpenAI-compatible endpoint (Hack Club AI), Pinecone → pgvector in Postgres, Google Sheets → Postgres tables. Email triage stays inactive until Google OAuth is set up.
+- **Container image**: n8n 2.44.3 pinned by digest, workflows and a start-up bootstrap baked in, tagged with the commit SHA.
+- **Kubernetes (Helm, kind)**: n8n with 1 replica, `Recreate` and probes; Postgres + pgvector StatefulSet with a PVC; secrets generated in the cluster; NetworkPolicies; restricted Pod Security.
+- **CI/CD (GitHub Actions)**: validate, scan, build, test-deploy on kind, push to GHCR, then an approved deploy to the laptop cluster with automatic rollback.
+- **Observability**: metrics, logs and traces in Grafana (Prometheus, Loki, Tempo), plus a dashboard and three alerts as code.
+- **Operations**: scripts for smoke tests, drift checks, evidence capture and three failure demos.
 
-[docs/BASELINE.md](docs/BASELINE.md) lists every baseline finding and its fix.
+## Run it locally
 
-## Running EchoMind locally
+Prerequisites: Docker Desktop (8 GB+ memory), kind 0.33, kubectl, Helm 4, Node.js 24, make, a Hack Club AI key and a Hugging Face read token. No n8n.io account is needed.
 
-### Prerequisites
-
-- Docker Desktop with at least 8 GB of memory
-- kind 0.33, kubectl, Helm 4, Node.js 24, make
-- gh (optional, only used by `make evidence` to list the CI runs for a commit)
-- A Hack Club AI key (or any OpenAI-compatible endpoint, see `llm.baseUrl` in `charts/echomind/values.yaml`) and a Hugging Face token with read access
-
-No n8n.io account is needed: n8n runs self-hosted, and on the first visit the editor asks you to create a local owner account.
-
-### Start everything
-
-```sh
-cp .env.example .env   # fill in the four values below; .env is git-ignored
-make up                # kind cluster, observability stack, image build, secrets, Helm deploy, smoke test
-```
-
-| `.env` variable | Used for |
-|---|---|
-| `LLM_API_KEY` | Key for the OpenAI-compatible LLM endpoint (Hack Club AI by default) |
-| `HUGGINGFACE_API_KEY` | Hugging Face embeddings (`sentence-transformers/all-MiniLM-L6-v2`) |
-| `ECHOMIND_INGEST_TOKEN` | Value clients send in `X-EchoMind-Token` to the ingest webhook |
-| `ECHOMIND_RECALL_PASSWORD` | Basic-auth password (user `echomind`) for the recall chat |
-
-`make secrets` copies these four values into the Kubernetes Secret `echomind-api-keys`; they never go into git, Helm values or CI logs.
-
-The first `make up` downloads about 1.5 GB of images into the kind node (n8n, pgvector, the observability stack), so it takes several minutes. Later runs reuse them.
-
-| What | URL |
-|---|---|
-| n8n editor | http://localhost:5678 |
-| Grafana (dashboard "EchoMind - service health") | http://localhost:3300 |
-
-Both ports are bound to `127.0.0.1` only.
-
-### Try it
+1. `cp .env.example .env`, then fill in `LLM_API_KEY`, `HUGGINGFACE_API_KEY`, `ECHOMIND_INGEST_TOKEN` and `ECHOMIND_RECALL_PASSWORD` (`.env` is git-ignored).
+2. `make up` creates the cluster, the observability stack, the image and the secrets, then deploys. The first run downloads about 1.5 GB of images.
+3. Open n8n at http://localhost:5678 (it asks for a local owner account on the first visit) and Grafana at http://localhost:3300 (`admin` / `admin`, dashboard "EchoMind - service health").
+4. Try it:
 
 ```sh
 set -a; . ./.env; set +a
 
-# Health check (no auth, no external calls)
-curl -s http://localhost:5678/webhook/echomind-health
-
-# Store a memory
+# store a memory -> 201 with a summary
 curl -s -X POST http://localhost:5678/webhook/b3f32965-eaf7-4301-82ca-1945d8ff2de5 \
-  -H 'content-type: application/json' \
-  -H "X-EchoMind-Token: $ECHOMIND_INGEST_TOKEN" \
-  -d '{"speaker":"Pranav","transcript":"In the mentor call we decided to deploy EchoMind on a local kind cluster instead of AWS."}'
+  -H 'content-type: application/json' -H "X-EchoMind-Token: $ECHOMIND_INGEST_TOKEN" \
+  -d '{"speaker":"Pranav","transcript":"We decided to deploy EchoMind on a local kind cluster."}'
 
-# Ask about it
-curl -s -u "echomind:$ECHOMIND_RECALL_PASSWORD" \
-  -X POST http://localhost:5678/webhook/9216b954-b7b0-44b2-b57a-bfd45c8940ea/chat \
+# ask about it -> 200 with the answer
+curl -s -u "echomind:$ECHOMIND_RECALL_PASSWORD" -X POST \
+  http://localhost:5678/webhook/9216b954-b7b0-44b2-b57a-bfd45c8940ea/chat \
   -H 'content-type: application/json' \
-  -d '{"action":"sendMessage","sessionId":"demo","chatInput":"Where did we decide to deploy EchoMind?"}'
+  -d '{"action":"sendMessage","sessionId":"demo","chatInput":"Where did we deploy EchoMind?"}'
 ```
 
-| Endpoint | Response |
-|---|---|
-| Ingest | `201` stored (with the summary), `400` transcript missing, `403` token missing or wrong, `500` processing failed (the error is logged) |
-| Recall | `200` with the answer, `401` without the login, `500` processing failed |
-
-Measured locally: ingest takes about 7–13 s (three LLM calls plus embeddings), recall about 2.6 s.
-
-### Make targets
-
-`make help` lists them all.
+## Useful commands
 
 | Command | What it does |
 |---|---|
-| `make up` | Everything from scratch: cluster, observability, build, load, secrets, deploy, smoke |
-| `make validate` | Checks the workflow files (`scripts/validate-workflows.mjs`) |
-| `make cluster` | Creates the kind cluster from `deploy/kind/kind-config.yaml` |
-| `make observability` | Applies `deploy/observability` (Grafana LGTM stack, collector, dashboard, alerts) |
-| `make build` / `make load` | Builds the image tagged with the current commit SHA / copies it into the kind node |
-| `make secrets` | Creates or updates the `echomind-api-keys` Secret from `.env` |
+| `make up` | Everything from scratch |
 | `make deploy` | `helm upgrade --install` with `--rollback-on-failure` |
-| `make smoke` / `make smoke-ci` | Full user journey (real AI calls) / the CI subset (health, `403`, `400`) |
-| `make helm-test` | Runs the chart's in-cluster test (calls the health-check workflow) |
-| `make netpol-check` | Proves that a pod other than n8n cannot reach Postgres |
+| `make smoke` | Full user journey: health, auth, ingest, recall |
 | `make history` / `make rollback` | Release history / roll back (`REVISION=<n>` for a specific one) |
-| `make drift` | Compares the live objects with the last Helm release |
-| `make evidence` | Writes `docs/evidence/<sha>.md` |
-| `make demo-bad-release` / `make demo-db-outage` / `make demo-ai-outage` | Failure demonstrations |
-| `make logs` | n8n logs |
-| `make grafana` / `make n8n` | Opens Grafana / the n8n editor |
-| `make down` | Deletes the local cluster |
+| `make drift` | Compare the live objects with the last Helm release |
+| `make evidence` | Write `docs/evidence/<sha>.md` |
+| `make demo-bad-release` | Deploy a broken release and watch Helm roll it back |
+| `make demo-db-outage` | Stop Postgres, watch readiness and recovery |
+| `make demo-ai-outage` | Break the LLM key, watch the failure get logged and alerted |
+| `make down` | Delete the cluster |
 
-## Delivery pipeline
+`make help` lists every target.
 
-`.github/workflows/ci.yml` runs on every push (all branches), on pull requests from forks, and on manual dispatch:
+## Pipeline
 
-| Job | What it does |
-|---|---|
-| `validate` | `scripts/validate-workflows.mjs` on `workflows/`; syntax checks of `scripts/*.sh`, `docker/bootstrap.sh` and `docker/render-credentials.js` |
-| `scan-source` | Trivy scan of the repository: vulnerabilities, secrets and misconfigurations, failing on fixable HIGH/CRITICAL |
-| `build-and-e2e` | Builds the image tagged with the full commit SHA, Trivy image scan, `helm lint`, creates a throwaway kind cluster from the same `deploy/kind/kind-config.yaml`, creates dummy secrets, deploys with `values-ci.yaml`, runs `SMOKE_MODE=ci scripts/smoke.sh` (health check, `403` without a token, `400` without a transcript, running version), `helm test` and `scripts/netpol-check.sh`, and only then pushes the image to GHCR |
-| `deploy-local` | On pushes only: calls `.github/workflows/deploy.yml` with the same commit SHA |
+`.github/workflows/ci.yml` runs on every push: `validate` (workflow and script checks) and `scan-source` (Trivy), then `build-and-e2e` (build the image tagged with the commit SHA, scan it, deploy it to a throwaway kind cluster, run the smoke test, `helm test` and the NetworkPolicy test, then push it to GHCR).
+`deploy-local` calls `.github/workflows/deploy.yml`, which waits for approval in the `local` environment and runs on the self-hosted runner on the laptop: pull the tested image, `helm upgrade --rollback-on-failure`, full smoke test. Running `deploy.yml` by hand with an older SHA rolls back.
+All actions are pinned to commit SHAs.
 
-`.github/workflows/deploy.yml` (job `deploy`) promotes that exact image to the laptop's cluster. It runs on a self-hosted runner (labels `self-hosted`, `echomind-local`) behind the GitHub environment `local`, which needs a reviewer's approval. Its steps: validate the SHA, pull the CI-built image and load it into kind, check that the `echomind-api-keys` Secret exists, `helm upgrade --install --rollback-on-failure --wait --timeout 8m` with `values-local.yaml`, run the full smoke test (real ingest and recall), and write the release history to the run summary. Running it by hand with an older SHA rolls back.
+## Docs
 
-All GitHub Actions are pinned to commit SHAs. Dependabot proposes updates for the actions and for the n8n base image.
-
-## Observability
-
-- An OpenTelemetry Collector (`otel/opentelemetry-collector-contrib:0.162.0`, DaemonSet in namespace `observability`) scrapes n8n's `/metrics` every 15 s as job `n8n` and tails the EchoMind pod logs from `/var/log/pods`. Those log files belong to root, so the collector runs as uid 0, with no capabilities, no privilege escalation, a read-only root filesystem and a read-only log mount.
-- n8n sends its own traces (one span per workflow execution and node) to Tempo over OTLP.
-- Grafana (`grafana/otel-lgtm:0.36.0`) has the dashboard "EchoMind - service health" and three alert rules, all provisioned from `deploy/observability/grafana/`. [docs/RUNBOOK.md](docs/RUNBOOK.md) explains each alert.
-
-## Operations
-
-| Task | How |
-|---|---|
-| Release history | `make history` (each revision's description records the SHA and CI run) |
-| Roll back | `make rollback` (previous release) or `make rollback REVISION=<n>`; or run the `deploy` workflow with an older SHA |
-| Detect manual changes | `make drift` compares the live objects with the last Helm release |
-| Capture evidence | `make evidence` writes `docs/evidence/<sha>.md` |
-| Failure demos | `make demo-bad-release`, `make demo-db-outage`, `make demo-ai-outage` |
-
-[docs/RUNBOOK.md](docs/RUNBOOK.md) covers alerts and recovery procedures, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md) explain the design.
-
-## Repository layout
-
-```
-workflows/              n8n workflow exports (the application) and a health-check workflow
-docker/                 start-up import: bootstrap.sh, render-credentials.js
-Dockerfile              pinned n8n image + workflows
-charts/echomind/        Helm chart: n8n, Postgres/pgvector, secrets, network policies, helm test
-deploy/kind/            local cluster config (the same file is used in CI)
-deploy/observability/   Grafana LGTM stack, OpenTelemetry Collector, dashboard, alert rules
-scripts/                workflow validation, smoke test, secrets, drift check, evidence, failure demos
-.github/                CI, CD, Dependabot
-docs/                   baseline, architecture, decisions, runbook, evidence
-```
+[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Runbook](docs/RUNBOOK.md) · [Baseline findings](docs/BASELINE.md) · [Evidence](docs/evidence/README.md)
 
 ## Known limitations
 
-- One n8n replica with the `Recreate` strategy. Every deploy causes a short outage, and a release that never becomes Ready keeps n8n down until Helm rolls it back (at most the 8-minute `--timeout`). This is deliberate (see DECISIONS.md #2); queue mode is the path to scaling and availability.
-- Single-node local cluster and a single Postgres instance: there is no high availability.
-- The real user journey depends on the external LLM endpoint and Hugging Face (availability, credits, rate limits). CI therefore tests the platform with the health-check workflow and dummy keys.
+- One n8n replica with `Recreate`: each deploy has a short outage, and a release that never becomes Ready keeps n8n down until Helm rolls back (about 151 s in the bad-release demo). The pipeline pulls the image before `helm upgrade`, so a missing image fails the job without touching the cluster.
+- Single-node cluster and a single Postgres instance: no high availability.
+- The user journey depends on the external LLM endpoint and Hugging Face (availability, credits, rate limits); CI tests the platform with the health-check workflow and dummy keys.
 - Email triage is inactive until Google OAuth credentials are set up.
-- The observability stack (`grafana/otel-lgtm`) is a demo image: its data is lost on restart, it runs as root without a read-only root filesystem and keeps three file-ownership capabilities (CHOWN, DAC_OVERRIDE, FOWNER) so Grafana can install its datasource plugins at start-up, and Grafana uses its default login (reachable only on `127.0.0.1`).
+- `grafana/otel-lgtm` is a demo image: data is lost on restart, it runs as root with the CHOWN, DAC_OVERRIDE and FOWNER capabilities (Grafana installs its datasource plugins at start-up), and Grafana uses its default login, reachable only on `127.0.0.1`.
 - Deploys need the laptop and the self-hosted runner to be online.
-- 13 CVEs in the upstream n8n 2.44.3 image are accepted until 2026-11-30, pending an upstream fix: 11 in JavaScript libraries bundled inside n8n (simple-git, @simple-git/argv-parser, handlebars, toml, nodemailer) and 2 in Alpine OS packages (tiff, libexpat). The image ships without a package manager, so we cannot patch them ourselves. Each one is listed with a reason in `.trivyignore.yaml`.
+- CI builds a `linux/amd64` image, which runs under emulation on Apple Silicon; a multi-architecture build would remove this.
+- The execution success ratio also counts the health-check workflow: n8n 2.44.3 labels only the `_sum` series by workflow, so it cannot be filtered out.
+- 13 CVEs in the upstream n8n image (11 in bundled libraries, 2 in Alpine packages) are accepted until 2026-11-30, each with a reason in `.trivyignore.yaml`.
 - API keys used during development must be rotated after grading.
 
 ## Credits
 
 - [n8n](https://github.com/n8n-io/n8n): workflow runtime (`n8nio/n8n` image)
 - [grafana/docker-otel-lgtm](https://github.com/grafana/docker-otel-lgtm): Kubernetes manifest for the observability stack (Apache-2.0)
+- [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector-contrib): metrics scrape and log shipping
+- [pgvector](https://github.com/pgvector/pgvector): vector search inside Postgres
 - The Helm chart started from the `helm create` scaffold
-- [pgvector](https://github.com/pgvector/pgvector): vector search inside Postgres (`pgvector/pgvector` image)

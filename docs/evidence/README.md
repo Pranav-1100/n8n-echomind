@@ -1,34 +1,51 @@
 # Evidence
 
-Evidence that the system works, tied to the commit it was captured for.
+Evidence that EchoMind builds, deploys and runs as described, tied to the commit it was captured for.
+
+**Tested release:** commit `a54d420dfce0edbe2665d98e91b223b13ce4ddef`, image
+`ghcr.io/pranav-1100/echomind:a54d420dfce0edbe2665d98e91b223b13ce4ddef`
+(digest `sha256:dc5f68382af1d625ecc4e1dfc8a25c79d54c50581cb8f513ecdfc6620960c293`), built and tested by
+[CI run 39142094458](https://github.com/Pranav-1100/n8n-echomind/actions/runs/39142094458) and deployed to the
+local cluster by the approved `promote to local cluster` job of the same run (Helm revision 2).
+Later commits only add this evidence, documentation and observability fixes.
 
 ## Generated files
 
 | File | How to regenerate | Shows |
 |---|---|---|
-| `<sha>.md` | `make evidence` | Source commit, pipeline runs for that commit, Helm release history, running pods and image digests, the full user journey (ingest → recall), security checks (NetworkPolicy test, service-account permissions, drift check), and telemetry queries (execution success ratio, n8n version, recent traces, alert rules) |
-| `demo-bad-release.txt` | `make demo-bad-release > docs/evidence/demo-bad-release.txt` | A release that never becomes Ready is rolled back automatically |
-| `demo-db-outage.txt` | `make demo-db-outage > docs/evidence/demo-db-outage.txt` | Postgres outage: readiness fails, the alert fires, recovery happens with no data lost |
-| `demo-ai-outage.txt` | `make demo-ai-outage > docs/evidence/demo-ai-outage.txt` | LLM endpoint failure: requests return `500`, errors are logged in `workflow_errors`, the failure-ratio alert fires |
+| `a54d420dfce0edbe2665d98e91b223b13ce4ddef.md` | `make evidence` | Source commit and baseline, pipeline runs for the commit, Helm history, running pods and image digests, the full user journey (ingest → recall), security checks (NetworkPolicy test, service-account permissions, drift check), telemetry (n8n version, success ratio, latency, traces, logs, alert rules) and database row counts |
+| `demos/bad-release.txt` | `make demo-bad-release` | A release whose image does not exist never becomes Ready; Helm rolls back automatically (revision 3 failed → revision 4 "Rollback to 2"). Measured impact with `Recreate`: about 151 s of failed health probes |
+| `demos/db-outage.txt` | `make demo-db-outage` | Postgres scaled to 0: n8n stays Running but not Ready (no restarts), requests fail fast, recovery is automatic and no data is lost |
+| `demos/ai-outage.txt` | `make demo-ai-outage` | An invalid LLM key: ingest returns `500` while n8n stays healthy, the error logger writes a row to `workflow_errors`, the log-based alert fires; restoring the key restores the full journey |
 
-<!-- TODO: final commit evidence file: docs/evidence/<final-sha>.md -->
+`make evidence` only reads state; its one exception is the smoke test, which stores a single test memory.
 
-`make evidence` only reads state. Its one exception is the smoke test, which stores a single test memory.
+**Unplanned incident during capture:** the first `make evidence` run failed at the recall step because the LLM provider
+returned `504 Gateway Timeout`. EchoMind returned `500`, the error logger stored
+`Memory Recall | Basic LLM Chain1 | Gateway timed out` in `workflow_errors`, and the log-based alert covers it. The re-run
+passed. This is why the success SLO is 95%: the external AI services are the weakest link.
 
-## Screenshots
+## Screenshots (`screenshots/`)
 
-<!-- TODO: add screenshots captured from the final deployment -->
-
-| File | What to capture |
+| File | Shows |
 |---|---|
-| `grafana-dashboard.png` | "EchoMind - service health" dashboard after a few ingest and recall requests |
-| `tempo-trace.png` | One ingest execution trace in Tempo, with the LLM and database spans visible |
-| `n8n-executions.png` | The n8n executions list with successful ingest and recall runs |
-| `ci-run.png` | The green CI run for the final commit |
-| `deploy-approved.png` | The deploy run after approval, with the release history summary |
+| `ci-run.png` | CI run for `a54d420`: validate, source scan and build + kind e2e green; image published with its digest |
+| `deploy-approved.png` | The same run after approval: all four jobs green, including the deploy to the local cluster |
+| `environment.png` | GitHub environment `local` with a required reviewer |
+| `runner.png` | The self-hosted runner `echomind-mac` and its labels |
+| `runner-deploy.png` | The runner picking up and completing the deploy job |
+| `fork-approval.png` | Fork pull-request workflows require approval for all external contributors |
+| `alert-rules.png` | The three provisioned EchoMind alert rules |
+| `alert-firing.png` | The log-based alert firing during the LLM-outage demo |
+| `alert-detail.png` | The firing alert's Loki query, threshold and runbook link |
+| `alert-pending.png` | The scrape alert going Pending while n8n restarted during the demo |
+| `dashboard.png` | "EchoMind - service health" dashboard |
+| `trace.png` | An ingest execution trace in Tempo |
+| `logs.png` | EchoMind logs in Loki |
+| `n8n-executions.png` | n8n's executions list |
 
 ## Links
 
-- CI run for the final commit: <!-- TODO: link -->
-- Deploy run: <!-- TODO: link -->
 - Pull request: https://github.com/Pranav-1100/n8n-echomind/pull/1
+- CI and deploy run for the tested release: https://github.com/Pranav-1100/n8n-echomind/actions/runs/39142094458
+- Baseline commit: https://github.com/Pranav-1100/n8n-echomind/commit/423c114d6dbcbd34af931eeec994c0600eead501

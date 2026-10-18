@@ -69,16 +69,20 @@ groups:
           runbook_url: docs/RUNBOOK.md#alert-echomind-n8n-down
 
       - uid: echomind-error-handler-ran
-        title: EchoMind - error logger workflow ran
+        # Log-based on purpose: n8n keeps its metrics in memory, so a restart
+        # resets the counters, and a counter series that first appears at 1 is
+        # invisible to increase(). The log line survives restarts and names
+        # the node that failed.
+        title: EchoMind - a webhook execution failed (from logs)
         condition: C
         data:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: prometheus
+            datasourceUid: loki
             model:
               refId: A
-              instant: true
-              expr: sum(increase(n8n_workflow_execution_duration_seconds_count{job="n8n",mode="error"}[10m]))
+              queryType: instant
+              expr: sum(count_over_time({service_name="echomind", k8s_container_name="n8n"} |= "Webhook execution failed" [10m]))
           - refId: C
             datasourceUid: __expr__
             model:
@@ -93,5 +97,5 @@ groups:
         labels:
           severity: ticket
         annotations:
-          summary: At least one workflow failed and the error logger recorded it in the workflow_errors table.
+          summary: n8n logged a failed webhook execution (ingest or recall) in the last 10 minutes; the error logger also wrote the details to workflow_errors.
           runbook_url: docs/RUNBOOK.md#alert-echomind-error-handler-ran
