@@ -1,0 +1,81 @@
+{{- if .Values.networkPolicy.enabled }}
+# n8n: accepts HTTP on 5678. Outbound only to Postgres, cluster DNS, the
+# telemetry collector and HTTPS on the public internet (the AI APIs); private
+# ranges are excluded so a compromised workflow cannot reach other services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "echomind.fullname" . }}-n8n
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "echomind.n8n.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - port: 5678
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "echomind.postgres.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: 5432
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if .Values.otel.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.otel.namespace }}
+      ports:
+        - port: 4318
+          protocol: TCP
+    {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+---
+# Postgres: only n8n may connect, and the database itself has no egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "echomind.fullname" . }}-postgres
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "echomind.postgres.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "echomind.n8n.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: 5432
+          protocol: TCP
+  egress: []
+{{- end }}

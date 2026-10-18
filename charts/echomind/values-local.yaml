@@ -1,0 +1,7 @@
+# Laptop kind cluster: n8n at http://localhost:5678 via the kind port mapping
+# in deploy/kind/kind-config.yaml.
+environment: local
+
+service:
+  type: NodePort
+  nodePort: 30678

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: echomind
+description: EchoMind - n8n memory assistant workflows with PostgreSQL + pgvector
+type: application
+# Chart version. The running application version is the image tag (git SHA).
+version: 0.1.0
+appVersion: "n8n-2.44.3"
+kubeVersion: ">=1.29.0-0"

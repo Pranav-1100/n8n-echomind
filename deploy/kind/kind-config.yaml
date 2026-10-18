@@ -1,0 +1,15 @@
+# Local Kubernetes cluster for EchoMind. CI creates the same cluster from this
+# file, so the pipeline tests exactly what runs on the laptop.
+# Host ports bind to 127.0.0.1 only: nothing is exposed beyond this machine.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: echomind
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30678 # n8n (Service echomind, NodePort)
+        hostPort: 5678
+        listenAddress: "127.0.0.1"
+      - containerPort: 30300 # Grafana (Service lgtm-grafana, NodePort)
+        hostPort: 3300
+        listenAddress: "127.0.0.1"
