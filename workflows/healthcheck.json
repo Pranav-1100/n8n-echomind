@@ -1,0 +1,57 @@
+{
+  "name": "EchoMind - Health Check",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "echomind-health",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0b7c1d6e-3f40-4a51-9d2e-health000001",
+      "name": "Health webhook",
+      "webhookId": "5f0c2a7e-9b1d-4c3e-8a6f-health000001"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'ok', workflow: $workflow.name, execution: $execution.id, time: $now.toISO() } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        240,
+        0
+      ],
+      "id": "0b7c1d6e-3f40-4a51-9d2e-health000002",
+      "name": "Respond: ok"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Health webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond: ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6c1e8f0a-2b3d-4e5f-9a0b-health000001",
+  "id": "echoHealthcheck1",
+  "tags": []
+}

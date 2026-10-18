@@ -1,10 +1,12 @@
 {
-  "name": "My workflow",
+  "name": "EchoMind - Memory Ingestion",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "b3f32965-eaf7-4301-82ca-1945d8ff2de5",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -15,7 +17,13 @@
       ],
       "id": "9e1bbff7-dbe5-42ba-9c32-87a5def100a9",
       "name": "Webhook",
-      "webhookId": "b3f32965-eaf7-4301-82ca-1945d8ff2de5"
+      "webhookId": "b3f32965-eaf7-4301-82ca-1945d8ff2de5",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "echoIngestAuth01",
+          "name": "EchoMind ingest token"
+        }
+      }
     },
     {
       "parameters": {
@@ -75,21 +83,27 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "options": {}
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-v4.1-flash-1017",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.2
+        }
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         352,
         80
       ],
       "id": "ad6d3ff9-001b-4e05-bcbc-5add72fbae13",
-      "name": "Groq Chat Model",
+      "name": "Chat Model",
       "credentials": {
-        "groqApi": {
-          "id": "RsqbPtMC4zeqR5vC",
-          "name": "Groq account"
+        "openAiApi": {
+          "id": "echoLlmApi000001",
+          "name": "EchoMind LLM"
         }
       }
     },
@@ -105,7 +119,7 @@
           "conditions": [
             {
               "id": "1c021aa1-dbc7-4649-8edb-3d78205d5de3",
-              "leftValue": "={{ parseFloat($json.text.match(/\"confidence\":\\s*([\\d.]+)/)[1]) }}",
+              "leftValue": "={{ parseFloat(((($json.text || '').match(/\"confidence\":\\s*([\\d.]+)/)) || [])[1] || '0') }}",
               "rightValue": 0.6,
               "operator": {
                 "type": "number",
@@ -174,21 +188,27 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "options": {}
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-v4.1-flash-1017",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.2
+        }
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         1200,
         16
       ],
       "id": "68c356f0-9ad2-4be0-8165-c1fa54a900ed",
-      "name": "Groq Chat Model1",
+      "name": "Chat Model1",
       "credentials": {
-        "groqApi": {
-          "id": "RsqbPtMC4zeqR5vC",
-          "name": "Groq account"
+        "openAiApi": {
+          "id": "echoLlmApi000001",
+          "name": "EchoMind LLM"
         }
       }
     },
@@ -216,21 +236,27 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "options": {}
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-v4.1-flash-1017",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.2
+        }
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         1504,
         32
       ],
       "id": "552de410-f48d-40c7-a9cf-b47aeb7aad2e",
-      "name": "Groq Chat Model2",
+      "name": "Chat Model2",
       "credentials": {
-        "groqApi": {
-          "id": "RsqbPtMC4zeqR5vC",
-          "name": "Groq account"
+        "openAiApi": {
+          "id": "echoLlmApi000001",
+          "name": "EchoMind LLM"
         }
       }
     },
@@ -283,170 +309,45 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY",
-          "mode": "list",
-          "cachedResultName": "EchoMind DB",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1quFMuuwBWxLZJQw2Gkf1fVUq__aC7JMaGvDtbnCW2fY/edit#gid=0"
-        },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "Speaker",
-              "displayName": "Speaker",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "Transcript",
-              "displayName": "Transcript",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "Emotion",
-              "displayName": "Emotion",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "Topic",
-              "displayName": "Topic",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "Summary",
-              "displayName": "Summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "speaker",
-              "displayName": "speaker",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "transcript",
-              "displayName": "transcript",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "emotion",
-              "displayName": "emotion",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "topic",
-              "displayName": "topic",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "summary",
-              "displayName": "summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
+        "operation": "executeQuery",
+        "query": "INSERT INTO memories (speaker, transcript, emotion, topic, summary)\nVALUES ($1, $2, $3, $4, $5)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$json.speaker ?? null, $json.transcript, $json.emotion, $json.topic, $json.summary] }}"
+        }
       },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
       "position": [
         2064,
         -128
       ],
       "id": "5a8074c3-22a1-4a13-a318-b921231d4713",
-      "name": "Append row in sheet",
+      "name": "Save memory",
       "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "rT4KDcdWTQem3Kev",
-          "name": "Google Sheets OAuth2 API"
+        "postgres": {
+          "id": "echoMemoryDb0001",
+          "name": "EchoMind memory database"
         }
       }
     },
     {
       "parameters": {
         "mode": "insert",
-        "pineconeIndex": {
-          "__rl": true,
-          "value": "echomind-n8n",
-          "mode": "list",
-          "cachedResultName": "echomind-n8n"
-        },
+        "tableName": "memory_vectors",
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
       "typeVersion": 1.3,
       "position": [
         1984,
         112
       ],
       "id": "c8bd907c-cef0-4100-8698-b6f396166209",
-      "name": "Pinecone Vector Store",
+      "name": "Store embedding",
       "credentials": {
-        "pineconeApi": {
-          "id": "cpOs1gTbLQ6QaeJU",
-          "name": "Pinecone account"
+        "postgres": {
+          "id": "echoMemoryDb0001",
+          "name": "EchoMind memory database"
         }
       }
     },
@@ -482,6 +383,51 @@
           "name": "Hugging Face account"
         }
       }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"error\": \"transcript is required\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        364,
+        200
+      ],
+      "id": "a4f1c2d3-0001-4e5f-8a9b-respond400000",
+      "name": "Respond: missing transcript"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2384,
+        -8
+      ],
+      "id": "a4f1c2d3-0002-4e5f-8a9b-waitforboth00",
+      "name": "Wait for both stores"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'stored', speaker: $('Edit Fields1').first().json.speaker, summary: $('Edit Fields1').first().json.summary } }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2624,
+        -8
+      ],
+      "id": "a4f1c2d3-0003-4e5f-8a9b-respond201000",
+      "name": "Respond: stored"
     }
   ],
   "pinData": {},
@@ -505,15 +451,11 @@
             "type": "main",
             "index": 0
           }
-        ]
-      ]
-    },
-    "Groq Chat Model": {
-      "ai_languageModel": [
+        ],
         [
           {
-            "node": "Basic LLM Chain",
-            "type": "ai_languageModel",
+            "node": "Respond: missing transcript",
+            "type": "main",
             "index": 0
           }
         ]
@@ -559,28 +501,6 @@
         ]
       ]
     },
-    "Groq Chat Model1": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain1",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq Chat Model2": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain2",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Basic LLM Chain1": {
       "main": [
         [
@@ -607,12 +527,12 @@
       "main": [
         [
           {
-            "node": "Append row in sheet",
+            "node": "Save memory",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Pinecone Vector Store",
+            "node": "Store embedding",
             "type": "main",
             "index": 0
           }
@@ -623,7 +543,7 @@
       "ai_document": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Store embedding",
             "type": "ai_document",
             "index": 0
           }
@@ -634,9 +554,75 @@
       "ai_embedding": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Store embedding",
             "type": "ai_embedding",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for both stores": {
+      "main": [
+        [
+          {
+            "node": "Respond: stored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save memory": {
+      "main": [
+        [
+          {
+            "node": "Wait for both stores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store embedding": {
+      "main": [
+        [
+          {
+            "node": "Wait for both stores",
+            "type": "main",
+            "index": 1
           }
         ]
       ]
