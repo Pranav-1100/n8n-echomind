@@ -1,0 +1,16 @@
+# kubectl apply -k deploy/observability
+# The dashboard and alert rules live in git and are mounted into Grafana. The
+# generated ConfigMap name includes a content hash, so editing them restarts
+# Grafana with the new version.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - lgtm.yaml
+  - otel-collector.yaml
+configMapGenerator:
+  - name: grafana-echomind
+    namespace: observability
+    files:
+      - grafana/dashboard-provider.yaml
+      - grafana/echomind-dashboard.json
+      - grafana/echomind-alerts.yaml

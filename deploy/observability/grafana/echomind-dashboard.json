@@ -1,0 +1,160 @@
+{
+  "uid": "echomind-overview",
+  "title": "EchoMind - service health",
+  "description": "SLO view of EchoMind on n8n: running version, scrape health, execution success, latency, logs and traces.",
+  "tags": ["echomind", "n8n", "slo"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "n8n version",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max by (version) (n8n_version_info{job=\"n8n\"})", "legendFormat": "{{version}}", "instant": true }
+      ],
+      "options": { "textMode": "name", "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "n8n reachable (scrape up)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max(up{job=\"n8n\"})", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Active workflows",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max(n8n_active_workflow_count{job=\"n8n\"})", "instant": true }
+      ],
+      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Execution success ratio (SLO 95%)",
+      "description": "Share of webhook/chat/trigger executions that succeeded over the selected time range. Error-handler and manual runs are excluded.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(n8n_workflow_execution_duration_seconds_count{job=\"n8n\",status=\"success\",mode!~\"error|manual\"}[$__range])) / sum(increase(n8n_workflow_execution_duration_seconds_count{job=\"n8n\",mode!~\"error|manual\"}[$__range]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 0.95 } ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Executions per minute by status and mode",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status, mode) (rate(n8n_workflow_execution_duration_seconds_count{job=\"n8n\"}[$__rate_interval])) * 60", "legendFormat": "{{mode}} {{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Execution failure ratio (alert above 20%)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "(sum(rate(n8n_workflow_execution_duration_seconds_count{job=\"n8n\",status=\"failed\",mode!~\"error|manual\"}[5m])) or vector(0)) / sum(rate(n8n_workflow_execution_duration_seconds_count{job=\"n8n\",mode!~\"error|manual\"}[5m]))", "legendFormat": "failure ratio" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.2 } ] }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Execution duration p50 / p95 by mode",
+      "description": "Ingestion makes three LLM calls plus an embedding, so seconds are expected; watch the trend, not the absolute value.",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, mode) (rate(n8n_workflow_execution_duration_seconds_bucket{job=\"n8n\",mode!=\"manual\"}[$__rate_interval])))", "legendFormat": "p95 {{mode}}" },
+        { "refId": "B", "expr": "histogram_quantile(0.50, sum by (le, mode) (rate(n8n_workflow_execution_duration_seconds_bucket{job=\"n8n\",mode!=\"manual\"}[$__rate_interval])))", "legendFormat": "p50 {{mode}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Error-handler runs (each one wrote a row to workflow_errors)",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status) (increase(n8n_workflow_execution_duration_seconds_count{job=\"n8n\",mode=\"error\"}[5m]))", "legendFormat": "error logger {{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60 } } }
+    },
+    {
+      "id": 9,
+      "type": "logs",
+      "title": "EchoMind logs: errors and warnings",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 9 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "expr": "{service_name=\"echomind\"} |~ \"(?i)(error|fail|warn)\"" }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true, "sortOrder": "Descending" }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Recent n8n traces (open one to see each node's span)",
+      "gridPos": { "x": 0, "y": 29, "w": 16, "h": 9 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "refId": "A", "queryType": "traceql", "query": "{ resource.service.name =~ \".*n8n.*\" }", "limit": 20, "tableType": "traces" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "How to investigate",
+      "gridPos": { "x": 16, "y": 29, "w": 8, "h": 9 },
+      "options": {
+        "mode": "markdown",
+        "content": "1. **Failure ratio up?** Find the failing workflow in the traces table; the span that errored names the node (LLM, embeddings or database).\n2. **n8n down?** `kubectl -n echomind get pods` and `kubectl -n echomind logs deploy/echomind -c n8n`.\n3. **Error logger ran?** `SELECT * FROM workflow_errors ORDER BY id DESC LIMIT 5;` in the `echomind` database.\n\nFull steps: `docs/RUNBOOK.md`."
+      }
+    }
+  ]
+}
