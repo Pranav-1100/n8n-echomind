@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Proposes n8n base-image upgrades (which also clear the accepted CVEs in
+  # .trivyignore.yaml) as pull requests that go through the full CI.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  # Keeps the SHA-pinned actions current without trusting mutable tags.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

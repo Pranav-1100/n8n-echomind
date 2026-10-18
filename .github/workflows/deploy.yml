@@ -1,0 +1,92 @@
+name: deploy
+
+# Promotes an image that CI already built, scanned and tested to the kind
+# cluster on the laptop. Runs on a self-hosted runner (GitHub cannot reach a
+# local cluster) behind the "local" environment, which requires a manual
+# approval. Run it by hand with an older SHA to roll back.
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full commit SHA of a CI-built image (an older SHA rolls back)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+# Never run two deployments against the same cluster at once.
+concurrency:
+  group: deploy-local
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: helm upgrade on local kind cluster
+    runs-on: [self-hosted, echomind-local]
+    environment:
+      name: local
+      url: http://localhost:5678
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Validate input
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "image_tag must be a full 40-character commit SHA"; exit 1; }
+
+      # Chart and image come from the same commit, so a release is exactly one commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.image_tag }}
+          persist-credentials: false
+
+      - name: Pull the CI-built image and load it into kind
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/echomind"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker pull "$image:$TAG"
+          docker logout ghcr.io
+          kind load docker-image "$image:$TAG" --name echomind
+
+      - name: Check cluster prerequisites
+        run: |
+          kubectl config use-context kind-echomind
+          kubectl create namespace echomind --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace echomind pod-security.kubernetes.io/enforce=restricted --overwrite
+          # API keys live only on this machine; they are never sent to GitHub.
+          if ! kubectl -n echomind get secret echomind-api-keys >/dev/null 2>&1; then
+            echo "::error::Secret echomind-api-keys is missing. On this machine, fill in .env and run: make secrets"
+            exit 1
+          fi
+
+      - name: Helm upgrade (rolls back automatically if pods never become Ready)
+        run: |
+          helm upgrade --install echomind charts/echomind -n echomind \
+            -f charts/echomind/values-local.yaml \
+            --set image.repository="$IMAGE" --set image.tag="$TAG" \
+            --set-string podAnnotations.echomind/ci-run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --rollback-on-failure --wait --timeout 8m \
+            --description "sha=$TAG run=$GITHUB_RUN_ID by=$GITHUB_ACTOR"
+
+      - name: Smoke test the release (real ingest and recall)
+        run: scripts/smoke.sh http://localhost:5678 "$TAG"
+
+      - name: Record release history
+        if: always()
+        run: |
+          {
+            echo "### Release history (local)"
+            echo '```'
+            helm history echomind -n echomind --max 5
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

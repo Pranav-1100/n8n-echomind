@@ -1,0 +1,10 @@
+# Trivy settings shared by CI and local runs:
+#   trivy fs --config trivy.yaml .
+#   trivy image --config trivy.yaml echomind:<tag>
+# Accepted findings, each with a reason and an expiry date, live in .trivyignore.yaml.
+ignorefile: .trivyignore.yaml
+misconfiguration:
+  helm:
+    # The chart refuses to render without an image tag; give it one to scan.
+    set:
+      - image.tag=trivy-scan
