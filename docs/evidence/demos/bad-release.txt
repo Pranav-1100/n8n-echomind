@@ -1,0 +1,24 @@
+
+== 21:30:47 before: revision 2, image ghcr.io/pranav-1100/echomind:a54d420dfce0edbe2665d98e91b223b13ce4ddef
+
+== 21:30:47 probe the health workflow every second while the bad release rolls out
+
+== 21:30:47 deploy bad release (0000000000000000000000000000000000000bad) with --rollback-on-failure
+level=WARN msg="upgrade failed" name=echomind error="resource Deployment/echomind/echomind not ready. status: InProgress, message: Available: 0/1\ncontext deadline exceeded"
+Error: UPGRADE FAILED: release echomind failed, and has been rolled back due to rollback-on-failure being set: resource Deployment/echomind/echomind not ready. status: InProgress, message: Available: 0/1
+context deadline exceeded
+helm exit code: 1 (non-zero expected)
+
+== 21:33:25 wait for the restored revision to become ready
+deployment "echomind" successfully rolled out
+
+== 21:39:52 evidence: release history
+REVISION	UPDATED                 	STATUS    	CHART         	APP VERSION	DESCRIPTION                                                                                                            
+1       	Sun Oct 18 21:03:19 2026	superseded	echomind-0.1.0	n8n-2.44.3 	local dev test                                                                                                         
+2       	Sun Oct 18 21:28:25 2026	superseded	echomind-0.1.0	n8n-2.44.3 	sha=a54d420dfce0edbe2665d98e91b223b13ce4ddef run=39142094458 by=Pranav-1100                                            
+3       	Sun Oct 18 21:30:47 2026	failed    	echomind-0.1.0	n8n-2.44.3 	Upgrade "echomind" failed: resource Deployment/echomind/echomind not ready. status: InProgress, message: Available: ...
+4       	Sun Oct 18 21:32:18 2026	deployed  	echomind-0.1.0	n8n-2.44.3 	Rollback to 2                                                                                                          
+
+== 21:39:53 after: image ghcr.io/pranav-1100/echomind:a54d420dfce0edbe2665d98e91b223b13ce4ddef
+health probes: 152 sent, 151 failed (~151s of downtime: Recreate stops the old pod first)
+DEMO OK: the bad release was rolled back automatically; the original image is running again

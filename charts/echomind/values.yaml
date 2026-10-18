@@ -1,0 +1,80 @@
+# Defaults shared by every environment. values-local.yaml and values-ci.yaml
+# override only what differs, so there are no drifting copies.
+
+image:
+  repository: ghcr.io/pranav-1100/echomind
+  # Required. The pipeline sets this to the full git commit SHA.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+environment: local
+timezone: Asia/Kolkata
+
+serviceAccount:
+  create: true
+  # n8n never talks to the Kubernetes API, so no token is mounted.
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 5678
+  nodePort: null
+
+n8n:
+  # Public base URL used in webhook URLs and the editor.
+  publicUrl: http://localhost:5678/
+  logLevel: info
+  # Workflows that are published (active) after every start. Email triage
+  # (WsiDb5beObmZquXG) is imported but stays off until Google OAuth is set up.
+  activeWorkflows:
+    - drIG795KFoFLjmQJ # EchoMind - Memory Ingestion
+    - q8sWsxDPB4n0NLly # EchoMind - Memory Recall
+    - idlaz2HumpPA0ZDI # EchoMind - Error Logger
+    - echoHealthcheck1 # EchoMind - Health Check
+  # Keep a week of execution history.
+  executionsMaxAgeHours: 168
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+
+# OpenAI-compatible LLM endpoint used by the workflows' chat model nodes.
+llm:
+  baseUrl: https://ai.hackclub.com/proxy/v1
+
+# Secret with LLM_API_KEY, HUGGINGFACE_API_KEY, ECHOMIND_INGEST_TOKEN and
+# ECHOMIND_RECALL_PASSWORD. Created outside the chart by scripts/make-secrets.sh
+# so the values never pass through git, Helm values or CI logs.
+apiKeysSecret: echomind-api-keys
+
+otel:
+  enabled: true
+  endpoint: http://lgtm.observability.svc.cluster.local:4318
+  # Namespace of the collector; the NetworkPolicy allows egress to it.
+  namespace: observability
+
+postgres:
+  image: pgvector/pgvector:pg17
+  storage:
+    size: 2Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+networkPolicy:
+  enabled: true
+
+tests:
+  image: curlimages/curl:8.11.1

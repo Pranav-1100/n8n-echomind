@@ -1,0 +1,7 @@
+EchoMind {{ include "echomind.imageTag" . }} is deployed to namespace {{ .Release.Namespace }} ({{ .Values.environment }}).
+
+n8n editor:   {{ .Values.n8n.publicUrl }}
+Health:       curl {{ .Values.n8n.publicUrl }}webhook/echomind-health
+History:      helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+Test:         helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+Start-up log: kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "echomind.fullname" . }} -c bootstrap

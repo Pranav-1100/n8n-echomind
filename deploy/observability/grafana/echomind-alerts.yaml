@@ -1,0 +1,101 @@
+# Alerts for EchoMind. Each one maps to a section of docs/RUNBOOK.md.
+# "User executions" are webhook/chat/trigger runs; error-handler runs
+# (mode="error") and manual editor runs are excluded from the SLO.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: echomind-slo
+    folder: echomind
+    interval: 30s
+    rules:
+      - uid: echomind-high-failure-ratio
+        title: EchoMind - more than 20% of executions failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(increase(n8n_workflow_execution_duration_seconds_count{job="n8n",status="failed",mode!~"error|manual"}[10m]))
+                /
+                sum(increase(n8n_workflow_execution_duration_seconds_count{job="n8n",mode!~"error|manual"}[10m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.2] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: More than 20% of EchoMind executions failed in the last 10 minutes (SLO is 95% success).
+          runbook_url: docs/RUNBOOK.md#alert-echomind-high-failure-ratio
+
+      - uid: echomind-n8n-down
+        title: EchoMind - n8n not answering metrics scrapes
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 120, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="n8n"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+        for: 2m
+        # No data at all means the scrape itself is broken, which is just as bad.
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: The collector cannot scrape n8n's /metrics endpoint, so n8n is down or unreachable.
+          runbook_url: docs/RUNBOOK.md#alert-echomind-n8n-down
+
+      - uid: echomind-error-handler-ran
+        # Log-based on purpose: n8n keeps its metrics in memory, so a restart
+        # resets the counters, and a counter series that first appears at 1 is
+        # invisible to increase(). The log line survives restarts and names
+        # the node that failed.
+        title: EchoMind - a webhook execution failed (from logs)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              expr: sum(count_over_time({service_name="echomind", k8s_container_name="n8n"} |= "Webhook execution failed" [10m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: ticket
+        annotations:
+          summary: n8n logged a failed webhook execution (ingest or recall) in the last 10 minutes; the error logger also wrote the details to workflow_errors.
+          runbook_url: docs/RUNBOOK.md#alert-echomind-error-handler-ran

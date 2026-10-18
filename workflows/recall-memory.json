@@ -1,8 +1,11 @@
 {
-  "name": "My workflow 2",
+  "name": "EchoMind - Memory Recall",
   "nodes": [
     {
       "parameters": {
+        "public": true,
+        "mode": "webhook",
+        "authentication": "basicAuth",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
@@ -13,7 +16,13 @@
       ],
       "id": "26589419-beff-47bb-a25d-e3b8b750fa94",
       "name": "When chat message received",
-      "webhookId": "9216b954-b7b0-44b2-b57a-bfd45c8940ea"
+      "webhookId": "9216b954-b7b0-44b2-b57a-bfd45c8940ea",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "echoRecallAuth01",
+          "name": "EchoMind recall login"
+        }
+      }
     },
     {
       "parameters": {
@@ -39,21 +48,27 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "options": {}
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-v4.1-flash-1017",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.2
+        }
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         208,
         160
       ],
       "id": "bc3d2c5b-13db-4507-a9f8-7b861d539d53",
-      "name": "Groq Chat Model",
+      "name": "Chat Model",
       "credentials": {
-        "groqApi": {
-          "id": "RsqbPtMC4zeqR5vC",
-          "name": "Groq account"
+        "openAiApi": {
+          "id": "echoLlmApi000001",
+          "name": "EchoMind LLM"
         }
       }
     },
@@ -99,28 +114,23 @@
     {
       "parameters": {
         "mode": "load",
-        "pineconeIndex": {
-          "__rl": true,
-          "value": "echomind-n8n",
-          "mode": "list",
-          "cachedResultName": "echomind-n8n"
-        },
+        "tableName": "memory_vectors",
         "prompt": "={{ $('When chat message received').item.json.chatInput }}",
         "topK": 3,
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
       "typeVersion": 1.3,
       "position": [
         768,
         0
       ],
       "id": "5b8480be-74ea-4848-9587-87a096a441ae",
-      "name": "Pinecone Vector Store",
+      "name": "Search memories",
       "credentials": {
-        "pineconeApi": {
-          "id": "cpOs1gTbLQ6QaeJU",
-          "name": "Pinecone account"
+        "postgres": {
+          "id": "echoMemoryDb0001",
+          "name": "EchoMind memory database"
         }
       }
     },
@@ -168,21 +178,27 @@
     },
     {
       "parameters": {
-        "model": "llama-3.3-70b-versatile",
-        "options": {}
+        "model": {
+          "__rl": true,
+          "value": "deepseek/deepseek-v4.1-flash-1017",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": 0.2
+        }
       },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
       "position": [
         1376,
         256
       ],
       "id": "944195a6-5be2-4603-9645-50c4043c6425",
-      "name": "Groq Chat Model1",
+      "name": "Chat Model1",
       "credentials": {
-        "groqApi": {
-          "id": "RsqbPtMC4zeqR5vC",
-          "name": "Groq account"
+        "openAiApi": {
+          "id": "echoLlmApi000001",
+          "name": "EchoMind LLM"
         }
       }
     },
@@ -220,17 +236,6 @@
         ]
       ]
     },
-    "Groq Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Basic LLM Chain": {
       "main": [
         [
@@ -246,7 +251,7 @@
       "main": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Search memories",
             "type": "main",
             "index": 0
           }
@@ -257,30 +262,8 @@
       "ai_embedding": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Search memories",
             "type": "ai_embedding",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pinecone Vector Store": {
-      "main": [
-        [
-          {
-            "node": "Aggregate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq Chat Model1": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain1",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]
@@ -296,12 +279,46 @@
           }
         ]
       ]
+    },
+    "Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search memories": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "idlaz2HumpPA0ZDI"
   },
   "versionId": "93563315-733d-4e84-be8d-e1c727295a06",
   "meta": {

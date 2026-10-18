@@ -1,0 +1,49 @@
+
+== 21:40:28 before
+memories stored: 5, n8n restarts: 0
+
+== 21:40:28 fault: scale Postgres to 0
+statefulset.apps/echomind-postgres scaled
+pod/echomind-postgres-0 condition met
+
+== 21:40:29 symptom: what a client sees (fast failures, no hangs)
+GET /webhook/echomind-health -> 503 in 0.016578s
+GET /webhook/echomind-health -> 503 in 0.020755s
+GET /webhook/echomind-health -> 503 in 0.022785s
+GET /webhook/echomind-health -> 503 in 0.012644s
+GET /webhook/echomind-health -> 000 in 0.003002s
+GET /webhook/echomind-health -> 000 in 0.001654s
+GET /webhook/echomind-health -> 000 in 0.003879s
+GET /webhook/echomind-health -> 000 in 0.003002s
+
+== 21:40:54 evidence: n8n is Running but not Ready, the Service has no endpoints
+POD                         PHASE     READY   RESTARTS
+echomind-5d9bf85f89-rw9dl   Running   false   0
+NAME             ADDRESSTYPE   PORTS   ENDPOINTS     AGE
+echomind-bbvj2   IPv4          5678    10.244.0.28   37m
+
+== 21:40:54 recover: scale Postgres back to 1
+statefulset.apps/echomind-postgres scaled
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+pod/echomind-5d9bf85f89-rw9dl condition met
+
+== 21:41:10 verify: the full user journey works again
+== health workflow (full mode)
+{"status":"ok","workflow":"EchoMind - Health Check","execution":"379","time":"2026-10-18T21:41:13.531+05:30"}
+== ingest without token -> 403
+403
+== ingest without transcript -> 400
+400
+== recall without login -> 401
+401
+== ingest a memory -> 201 (real LLM + embeddings, can take ~15s)
+{"status":"stored","speaker":"smoke-test","summary":"In the smoke test call, the team agreed that checklist release-1792339874-5156 is owned by the platform team and is due on Friday. This establishes platform team ownership and a Friday deadline for that checklist."}
+== recall it -> 200
+{"text":"Checklist **release-1792339874-5156** is owned by the **platform team** and is due on **Friday**."}
+SMOKE OK (full): health, version, auth, validation, ingest and recall on http://localhost:5678
+
+== 21:41:40 verify: data survived
+memories stored: before 5, after 6 (the smoke test adds 1)
+n8n restarts: before 0, after 0
+DEMO OK: outage contained, recovered on its own, data intact

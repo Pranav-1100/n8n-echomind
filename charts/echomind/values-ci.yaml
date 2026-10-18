@@ -1,0 +1,11 @@
+# Throwaway kind cluster in GitHub Actions. Same chart and kind config as the
+# laptop; no observability stack runs in CI, and the API keys are dummies, so
+# CI tests the platform (health, auth, validation) rather than the AI services.
+environment: ci
+
+service:
+  type: NodePort
+  nodePort: 30678
+
+otel:
+  enabled: false

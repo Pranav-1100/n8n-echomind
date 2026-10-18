@@ -1,0 +1,80 @@
+# Accepted vulnerability findings.
+#
+# All entries below come from inside the official n8nio/n8n 2.44.3 image:
+# JavaScript libraries bundled with n8n, and two Alpine OS packages. The image
+# ships without a package manager (hardened), so none of them can be patched
+# from this repository without rebuilding n8n itself. They are accepted
+# temporarily with a reason and an expiry date. When an entry expires, the CI
+# scan fails again and forces a re-check (normally by taking the n8n release
+# that ships the fix, which Dependabot proposes).
+vulnerabilities:
+  # Alpine OS packages in the upstream image (no apk available to upgrade them).
+  - id: CVE-2026-4775
+    statement: >-
+      tiff 4.7.1-r0 (fixed in 4.7.2-r0) - the upstream n8n image ships without a
+      package manager, so OS packages cannot be patched downstream. EchoMind does
+      not process TIFF images. Tracked until n8n publishes a rebuilt image (Dependabot).
+    expired_at: 2026-11-30
+  - id: CVE-2026-77214
+    statement: >-
+      libexpat 2.8.5-r0 (fixed in 2.9.0-r0) - the upstream n8n image ships without a
+      package manager, so OS packages cannot be patched downstream. EchoMind does
+      not process untrusted XML. Tracked until n8n publishes a rebuilt image (Dependabot).
+    expired_at: 2026-11-30
+
+  # simple-git: used by n8n's Git node and its source-control (Git sync)
+  # feature. EchoMind's workflows contain no Git node and source control is
+  # not enabled, so no Git commands are built from workflow input.
+  - id: CVE-2026-102826
+    statement: simple-git (bundled in n8n) - Git node and source control are not used by EchoMind.
+    expired_at: 2026-11-30
+  - id: CVE-2026-102827
+    statement: simple-git (bundled in n8n) - Git node and source control are not used by EchoMind.
+    expired_at: 2026-11-30
+  - id: CVE-2026-102828
+    statement: simple-git (bundled in n8n) - Git node and source control are not used by EchoMind.
+    expired_at: 2026-11-30
+  - id: CVE-2026-102829
+    statement: "@simple-git/argv-parser (bundled in n8n) - only reached through simple-git, which EchoMind does not use."
+    expired_at: 2026-11-30
+
+  # handlebars: template engine inside n8n's dependency tree. EchoMind's
+  # workflows do not compile templates from user input, and the n8n editor
+  # (where workflows are authored) is only reachable on 127.0.0.1.
+  - id: CVE-2026-106445
+    statement: handlebars (bundled in n8n) - no user-supplied templates are compiled; editor bound to localhost.
+    expired_at: 2026-11-30
+  - id: CVE-2026-106446
+    statement: handlebars (bundled in n8n) - no user-supplied templates are compiled; editor bound to localhost.
+    expired_at: 2026-11-30
+
+  # toml: TOML parser inside n8n's dependency tree. EchoMind never parses
+  # TOML; all inputs are JSON from authenticated webhooks.
+  - id: CVE-2026-63376
+    statement: toml (bundled in n8n) - EchoMind does not parse TOML input.
+    expired_at: 2026-11-30
+  - id: CVE-2026-77465
+    statement: toml (bundled in n8n) - EchoMind does not parse TOML input.
+    expired_at: 2026-11-30
+
+  # nodemailer: used by n8n's Send Email node and user-management emails.
+  # No SMTP server is configured and no EchoMind workflow sends email.
+  - id: CVE-2026-82659
+    statement: nodemailer (bundled in n8n) - no SMTP configured and no workflow sends email.
+    expired_at: 2026-11-30
+  - id: GHSA-2x7j-588g-ccc2
+    statement: nodemailer (bundled in n8n) - no SMTP configured and no workflow sends email.
+    expired_at: 2026-11-30
+  - id: GHSA-v53p-9fqp-m79j
+    statement: nodemailer (bundled in n8n) - no SMTP configured and no workflow sends email.
+    expired_at: 2026-11-30
+
+misconfigurations:
+  - id: KSV-0014
+    paths:
+      - deploy/observability/lgtm.yaml
+    statement: >-
+      grafana/otel-lgtm is a third-party demo image that writes to its own root
+      filesystem at start-up, so a read-only root filesystem is not possible.
+      It runs only in the local cluster, has no service account token, drops
+      all capabilities and is reachable only on 127.0.0.1.

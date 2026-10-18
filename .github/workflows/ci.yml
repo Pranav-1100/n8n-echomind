@@ -1,0 +1,180 @@
+name: ci
+
+# Every push is validated, scanned, built, deployed to a throwaway kind cluster
+# and smoke-tested. Only an image that passed all of that is pushed to GHCR,
+# and only that image can be promoted to the local cluster (deploy.yml).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: jobs ask for more only when they need it.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: v4.3.1
+  KIND_VERSION: v0.33.0
+  TRIVY_VERSION: v0.70.0
+
+jobs:
+  validate:
+    name: validate workflows and scripts
+    # Branches in this repo are already covered by the push run; pull_request
+    # runs only matter for forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Validate n8n workflows
+        run: node scripts/validate-workflows.mjs workflows
+      - name: Syntax-check scripts
+        run: |
+          for f in scripts/*.sh; do bash -n "$f"; done
+          sh -n docker/bootstrap.sh
+          node --check docker/render-credentials.js
+
+  scan-source:
+    name: scan source (secrets, misconfig, dependencies)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Pinned to a commit SHA: trivy-action's version tags were hijacked in
+      # March 2026 (CVE-2026-33634), so tags are not trusted.
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          trivy-config: trivy.yaml
+          trivyignores: .trivyignore.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  build-and-e2e:
+    name: build, scan image, deploy to kind, smoke test
+    needs: [validate, scan-source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # push the tested image to GHCR
+    env:
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/echomind" >> "$GITHUB_ENV"
+
+      - name: Build image (tagged with the commit SHA)
+        run: |
+          docker build \
+            --build-arg GIT_SHA="$TAG" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg SOURCE_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            -t "$IMAGE:$TAG" .
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          scanners: vuln
+          trivy-config: trivy.yaml
+          trivyignores: .trivyignore.yaml
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint
+        run: helm lint charts/echomind -f charts/echomind/values-ci.yaml --set image.tag="$TAG"
+
+      - name: Create kind cluster (same config as the laptop)
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          config: deploy/kind/kind-config.yaml
+          cluster_name: echomind
+
+      - name: Load image into kind
+        run: kind load docker-image "$IMAGE:$TAG" --name echomind
+
+      - name: Namespace and throwaway secrets
+        run: |
+          kubectl create namespace echomind
+          kubectl label namespace echomind pod-security.kubernetes.io/enforce=restricted
+          # Dummy API keys: CI never calls the external AI services.
+          scripts/make-secrets.sh --dummy echomind
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install echomind charts/echomind -n echomind \
+            -f charts/echomind/values-ci.yaml \
+            --set image.repository="$IMAGE" --set image.tag="$TAG" \
+            --rollback-on-failure --wait --timeout 8m \
+            --description "ci run $GITHUB_RUN_ID"
+
+      - name: Smoke test (health workflow, auth, validation, running version)
+        run: SMOKE_MODE=ci scripts/smoke.sh http://localhost:5678 "$TAG"
+
+      - name: Helm test (in-cluster)
+        run: helm test echomind -n echomind --logs
+
+      - name: NetworkPolicy test
+        run: scripts/netpol-check.sh echomind echomind
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get all,events -n echomind || true
+          kubectl describe pods -n echomind || true
+          kubectl logs -n echomind deploy/echomind -c bootstrap --tail=200 || true
+          kubectl logs -n echomind -l app.kubernetes.io/instance=echomind --all-containers --prefix --tail=200 || true
+
+      - name: Push tested image to GHCR
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$TAG"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$TAG")
+          {
+            echo "### Image published"
+            echo "- commit: \`$TAG\`"
+            echo "- image: \`$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-local:
+    name: promote to local cluster
+    needs: build-and-e2e
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      image_tag: ${{ github.sha }}
+    permissions:
+      contents: read
+      packages: read

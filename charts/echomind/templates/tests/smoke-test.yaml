@@ -1,0 +1,32 @@
+# `helm test echomind` calls the health-check workflow from inside the
+# cluster: proves Service -> n8n -> workflow engine -> Postgres end to end.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "echomind.fullname" . }}-smoke-test
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: smoke
+      image: {{ .Values.tests.image }}
+      securityContext:
+        {{- include "echomind.restrictedSecurityContext" . | nindent 8 }}
+      command:
+        - sh
+        - -ec
+        - |
+          body=$(curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+            "http://{{ include "echomind.fullname" . }}:{{ .Values.service.port }}/webhook/echomind-health")
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"'

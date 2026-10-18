@@ -1,0 +1,66 @@
+{
+  "name": "EchoMind - Error Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "59fb5cf6-6d3c-4388-a8ed-dbbd17418f59",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_errors (workflow, failed_node, error_message, execution_url)\nVALUES ($1, $2, $3, $4);",
+        "options": {
+          "queryReplacement": "={{ [$json.workflow.name, $json.execution.lastNodeExecuted ?? null, $json.execution.error?.message ?? null, $json.execution.url ?? null] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "acd3d085-7054-49a3-85de-891494007e3e",
+      "name": "Log error",
+      "credentials": {
+        "postgres": {
+          "id": "echoMemoryDb0001",
+          "name": "EchoMind memory database"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6b867da9-66c2-46d0-bbe2-708f1f20a4be",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "13243da696b496ed3d9e3284ec4d34e6803f8469480ea119cb0c43017d344a03"
+  },
+  "nodeGroups": [],
+  "id": "idlaz2HumpPA0ZDI",
+  "tags": []
+}

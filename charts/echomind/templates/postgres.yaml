@@ -1,0 +1,130 @@
+# Creates the "echomind" application database and role on first start (runs
+# only when the data directory is empty). Schema: files/10-echomind-db.sh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "echomind.postgres.host" . }}-initdb
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+data:
+  10-echomind-db.sh: |
+    {{- .Files.Get "files/10-echomind-db.sh" | nindent 4 }}
+---
+# Headless Service: a stable DNS name (echomind-postgres) for the StatefulSet pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "echomind.postgres.host" . }}
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  selector:
+    {{- include "echomind.postgres.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# StatefulSet + volumeClaimTemplate: the pod keeps its identity and its
+# PersistentVolume across restarts and upgrades, so data survives.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "echomind.postgres.host" . }}
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  serviceName: {{ include "echomind.postgres.host" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "echomind.postgres.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echomind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: database
+      annotations:
+        checksum/initdb: {{ .Files.Get "files/10-echomind-db.sh" | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999 # "postgres" user in the Debian-based image
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: n8n
+            - name: POSTGRES_DB
+              value: n8n
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "echomind.dbSecretName" . }}
+                  key: n8n-password
+            - name: ECHOMIND_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "echomind.dbSecretName" . }}
+                  key: echomind-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext:
+            {{- include "echomind.restrictedSecurityContext" . | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "n8n", "-d", "n8n"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "n8n", "-d", "n8n"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: initdb
+          configMap:
+            name: {{ include "echomind.postgres.host" . }}-initdb
+            defaultMode: 0555
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgres.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage.size }}

@@ -1,0 +1,161 @@
+{{- $secretEnv := list
+  (dict "name" "DB_POSTGRESDB_PASSWORD" "secret" (include "echomind.dbSecretName" .) "key" "n8n-password")
+  (dict "name" "N8N_ENCRYPTION_KEY" "secret" (include "echomind.encryptionKeySecretName" .) "key" "key")
+}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "echomind.fullname" . }}
+  labels:
+    {{- include "echomind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: n8n
+spec:
+  # One n8n main process: in regular mode every instance runs the triggers, so
+  # two would fire each trigger twice and race on database migrations.
+  replicas: 1
+  # Recreate stops the old pod before starting the new one for the same
+  # reason. Cost: a short gap during each deploy. Scaling path: queue mode.
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "echomind.n8n.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "echomind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: n8n
+      annotations:
+        # Restart n8n when its configuration changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "echomind.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Makes n8n's database match git before n8n starts: imports the
+        # credentials (from Secrets) and the workflows baked into this image,
+        # then publishes the active ones. See docker/bootstrap.sh.
+        - name: bootstrap
+          image: "{{ .Values.image.repository }}:{{ include "echomind.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/echomind/bootstrap.sh"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "echomind.fullname" . }}
+          env:
+            {{- range $secretEnv }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secret }}
+                  key: {{ .key }}
+            {{- end }}
+            - name: ECHOMIND_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "echomind.dbSecretName" . }}
+                  key: echomind-password
+            {{- range list "LLM_API_KEY" "HUGGINGFACE_API_KEY" "ECHOMIND_INGEST_TOKEN" "ECHOMIND_RECALL_PASSWORD" }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.apiKeysSecret }}
+                  key: {{ . }}
+            {{- end }}
+            # The import commands do not need to send traces.
+            - name: N8N_OTEL_ENABLED
+              value: "false"
+          securityContext:
+            {{- include "echomind.restrictedSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          volumeMounts:
+            - name: n8n-home
+              mountPath: /home/node/.n8n
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/node/.cache
+      containers:
+        - name: n8n
+          image: "{{ .Values.image.repository }}:{{ include "echomind.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 5678
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "echomind.fullname" . }}
+          env:
+            {{- range $secretEnv }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secret }}
+                  key: {{ .key }}
+            {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.version={{ include "echomind.imageTag" . }},deployment.environment.name={{ .Values.environment }},k8s.namespace.name={{ .Release.Namespace }},k8s.pod.name=$(POD_NAME)"
+          securityContext:
+            {{- include "echomind.restrictedSecurityContext" . | nindent 12 }}
+          # startup: n8n may run database migrations after an upgrade.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          # liveness: restart only if the process itself is stuck.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # readiness: traffic only while the database is connected and migrated.
+          readinessProbe:
+            httpGet:
+              path: /healthz/readiness
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          volumeMounts:
+            - name: n8n-home
+              mountPath: /home/node/.n8n
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/node/.cache
+      volumes:
+        # n8n's settings folder. All lasting state lives in Postgres, so an
+        # empty folder on every start is fine (and keeps the root FS read-only).
+        - name: n8n-home
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        # n8n compiles its editor assets into ~/.cache at start-up.
+        - name: cache
+          emptyDir:
+            sizeLimit: 512Mi
